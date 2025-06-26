@@ -70,6 +70,7 @@ A base está hospedada no [Supabase](https://supabase.com/), com milhares de reg
 
 ```bash
 git clone https://github.com/backhenry/Chatbot-Analise-Dados-n8n-Supabase.git
+```
 
 ### 🔄 Importar o Workflow  
 No painel do **n8n**, importe o arquivo `workflow.json` incluído neste repositório.
