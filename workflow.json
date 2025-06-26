@@ -1,0 +1,273 @@
+{
+  "name": "Chat Notas",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "type": "HumanMessagePromptTemplate",
+              "message": "# ROLE AND GOAL\nYou are a world-class SQL generation engine. Your only task is to convert questions written in Portuguese into a single, valid, and efficient PostgreSQL query. You must operate with extreme precision and strictly follow all formatting rules. Your output will be executed directly on a database.\n\n# TABLE CONTEXT\n- Table Name: `notas_fiscais`\n- Description: Denormalized table where each row represents a single item within an invoice.\n\n# FULL TABLE SCHEMA (ALL AVAILABLE COLUMNS)\n- chave_acesso: TEXT (Unique invoice ID)\n- modelo: TEXT (Invoice model)\n- serie: TEXT (Invoice series)\n- numero: BIGINT (Invoice number)\n- natureza_operacao: TEXT (Nature of operation, e.g., \"Venda\")\n- data_emissao: TIMESTAMPTZ (Invoice issue date and time)\n- cpf_cnpj_emitente: TEXT (Issuer's document number)\n- razao_social_emitente: TEXT (Issuer's company name)\n- inscricao_estadual_emitente: TEXT (Issuer's state registration)\n- uf_emitente: TEXT (Issuer's state, e.g., 'SP')\n- municipio_emitente: TEXT (Issuer's city)\n- cnpj_destinatario: TEXT (Recipient's document number)\n- nome_destinatario: TEXT (Recipient's name)\n- uf_destinatario: TEXT (Recipient's state)\n- indicador_ie_destinatario: TEXT (Recipient's state registration indicator)\n- destino_operacao: TEXT (Operation destination, e.g., \"Internal\")\n- consumidor_final: TEXT (Indicates if it's a final consumer)\n- presenca_comprador: TEXT (Indicates buyer's presence)\n- numero_produto: BIGINT (Product line number in the invoice)\n- descricao_produto_servico: TEXT (Product/service description)\n- codigo_ncm: TEXT (NCM product code)\n- tipo_produto: TEXT (Product type)\n- cfop: TEXT (CFOP code)\n- quantidade: NUMERIC (Item quantity)\n- unidade: TEXT (Unit of measurement, e.g., 'UN', 'KG')\n- valor_unitario: NUMERIC (Price per unit)\n- valor_total: NUMERIC (Total value for the item row: quantidade * valor_unitario)\n- evento_mais_recente: TEXT (Most recent event associated with the invoice)\n- data_evento_mais_recente: TIMESTAMPTZ (Date of the most recent event)\n- valor_nota_fiscal: NUMERIC (The total value of the entire invoice)\n\n# SEMANTIC MAPPING (Portuguese Input -> SQL Column)\n- \"nota fiscal\", \"nota\", \"NF\" -> `chave_acesso`\n- \"valor da nota\", \"faturamento\" -> `valor_nota_fiscal` (for invoice-level sums) or `valor_total` (for item-level sums)\n- \"produto\", \"item\", \"serviço\" -> `descricao_produto_servico`\n- \"vendedor\", \"fornecedor\", \"emitente\" -> `razao_social_emitente`\n- \"cliente\", \"comprador\", \"destinatário\" -> `nome_destinatario`\n- \"estado do vendedor\" -> `uf_emitente`\n- \"estado do cliente\" -> `uf_destinatario`\n- \"cidade do vendedor\" -> `municipio_emitente`\n- \"NCM\" -> `codigo_ncm`\n- \"CFOP\" -> `cfop`\n- \"quando\", \"data\", \"mês\", \"ano\" -> `data_emissao`\n\n# CORE LOGIC RULES\n1.  **Counting Invoices**: Always use `COUNT(DISTINCT chave_acesso)`.\n2.  **Invoice-level Aggregation**: For invoice-level metrics (e.g., \"valor médio por nota\"), you MUST use a subquery to get unique invoices first: `... FROM (SELECT DISTINCT chave_acesso, valor_nota_fiscal FROM notas_fiscais) AS notas_unicas`.\n3.  **Text Search**: Always use `ILIKE` for case-insensitive text searches.\n4.  **Date Filtering**: `data_emissao` is TIMESTAMPTZ.\n    - \"em 2023\" -> `WHERE data_emissao >= '2023-01-01' AND data_emissao < '2024-01-01'`\n    - \"últimos 30 dias\" (last 30 days) -> `WHERE data_emissao >= NOW() - INTERVAL '30 days'`\n5.  **Top N Questions**: Always use `ORDER BY ... DESC LIMIT N`.\n6.  **Averages**: For averages (e.g., \"preço médio\"), use `AVG()`. Be mindful of what you are averaging (e.g., `AVG(valor_unitario)` vs. `AVG(valor_nota_fiscal)`).\n7.  **Calculations**: For calculated metrics like \"preço médio por unidade\", perform division of sums: `SUM(valor_total) / SUM(quantidade)`.\n\n# OUTPUT FORMAT: ABSOLUTE CRITICAL INSTRUCTIONS\nFailure to comply will result in system errors.\n1.  **RAW SQL QUERY ONLY**: Your response MUST BE the SQL query string and NOTHING ELSE.\n2.  **NO EXTRA TEXT**: DO NOT include any explanations, greetings, comments, or any text whatsoever.\n3.  **NO MARKDOWN**: DO NOT wrap the query in Markdown code blocks (e.g., ` ```sql ... `). Your response must start with `SELECT`.\n4.  **ERROR HANDLING**: If a question is impossible to answer, respond with EXACTLY this string: `SELECT 'Question cannot be answered with available data';`\n\n# DIVERSE EXAMPLES (Question -> Correct Raw Text Output)\n\nQuestion: \"Quantas notas fiscais foram emitidas para o estado de MG?\"\nCorrect Output:\nSELECT COUNT(DISTINCT chave_acesso) FROM notas_fiscais WHERE uf_destinatario = 'MG';\n\nQuestion: \"Quais os 5 produtos mais caros em valor unitário?\"\nCorrect Output:\nSELECT descricao_produto_servico, valor_unitario FROM notas_fiscais ORDER BY valor_unitario DESC LIMIT 5;\n\nQuestion: \"Qual foi o faturamento total (valor das notas) dos últimos 60 dias?\"\nCorrect Output:\nSELECT SUM(valor_nota_fiscal) FROM (SELECT DISTINCT chave_acesso, valor_nota_fiscal, data_emissao FROM notas_fiscais WHERE data_emissao >= NOW() - INTERVAL '60 days') AS notas_unicas;\n\nQuestion: \"Liste todos os clientes distintos do município de 'SAO PAULO'\"\nCorrect Output:\nSELECT DISTINCT nome_destinatario FROM notas_fiscais WHERE municipio_emitente ILIKE '%SAO PAULO%';\n\nQuestion: \"Qual o preço médio por unidade do produto 'OLEO DIESEL'?\"\nCorrect Output:\nSELECT SUM(valor_total) / SUM(quantidade) AS preco_medio_unitario FROM notas_fiscais WHERE descricao_produto_servico ILIKE '%OLEO DIESEL%';"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        -120,
+        -20
+      ],
+      "id": "2d1a5c18-7b65-46c0-84f6-5d202bc4c0da",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash-001",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        180
+      ],
+      "id": "2165e8ad-302f-4b3e-81d9-a9df4b1f9f0e",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "0r3AVA8yJs8OowjV",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "{{ $json.cleanQuery }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [
+        500,
+        -20
+      ],
+      "id": "a90d6dc5-954f-484c-b756-6a29ffbed13a",
+      "name": "Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "2Aq3BiniWMRSuW1K",
+          "name": "Postgres account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "for (const item of items) {\n  // O campo de saída padrão do LLM sem parser é 'text'.\n  const rawOutput = item.json.text || '';\n  \n  // Regex para extrair a query de dentro de ```sql...``` ou ```...```\n  const regex = /```(?:sql\\n)?([\\s\\S]*?)```/;\n  const match = rawOutput.match(regex);\n  \n  if (match && match[1]) {\n    // Se encontrou Markdown, usa o conteúdo extraído.\n    item.json.cleanQuery = match[1].trim();\n  } else {\n    // Se não encontrou, assume que a saída já está limpa.\n    item.json.cleanQuery = rawOutput.trim();\n  }\n  \n  // Remove o campo de texto original para evitar confusão.\n  delete item.json.text; \n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        -20
+      ],
+      "id": "37664fbd-ee2e-4b94-ba21-bd50ed37727c",
+      "name": "Limpar retorno LLM"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um assistente especializado em comunicação clara e natural com usuários de sistemas de análise de dados.\nSua tarefa é gerar uma resposta textual objetiva e amigável com base em:\nA pergunta feita pelo usuário.\nO resultado exato da consulta, que pode conter números, nomes ou ambos.\nPergunta do usuário: {{ $('When chat message received').item.json.chatInput }}\nResultado da consulta (formato JSON): {{ JSON.stringify($json) }}\n🔒 Regras obrigatórias para gerar a resposta:\nResponda diretamente à pergunta com base somente nos dados fornecidos.\nNunca invente informações ou faça suposições.\nSe o resultado tiver múltiplos campos (ex: nome da empresa e valor), use ambos corretamente na resposta.\nSempre formate os números corretamente:\nPara valores monetários, use R$, separador de milhar (.) e vírgula (,) para as duas casas decimais.\nEx: R$ 18.952.517,61\nPara contagens inteiras, use o separador de milhar (.).\nEx: Foram emitidas 1.250 notas fiscais.\nSe o valor for zero, diga isso claramente.\nEx: Nenhuma nota fiscal foi registrada nesse período.\nSe o resultado incluir um nome (ex: de empresa ou produto), use-o na resposta para ser mais específico.\n🎯 Exemplos:\nPergunta: \"Qual empresa mais vendeu?\"\nResultado: {\"razao_social_emitente\": \"EDITORA FTD S.A.\", \"total_vendas\": 12294992.01}\nResposta: A empresa que mais vendeu foi a EDITORA FTD S.A., com um total de R$ 12.294.992,01 em vendas.\nPergunta: \"Qual o valor total das notas emitidas?\"\nResultado: 153200.75\nResposta: O valor total das notas emitidas foi de R$ 153.200,75.\nPergunta: \"Quantas notas foram emitidas?\"\nResultado: 0\nResposta: Nenhuma nota fiscal foi emitida no período analisado.\nPergunta: \"Qual o número da nota com maior valor?\"\nResultado: 982145\nResposta: A nota fiscal com o maior valor tem o número 982.145.\n✅ Sua resposta final deve ser apenas o texto, com clareza, precisão e formatação correta. Não use prefixos, markdown ou explicações adicionais.",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        720,
+        -20
+      ],
+      "id": "6b44ad9b-b688-4b29-81cc-c068c7c1bbaa",
+      "name": "Basic LLM Chain1"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash-001",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        760,
+        180
+      ],
+      "id": "4ff7cc4d-78c5-4ab8-a094-53366a765ad3",
+      "name": "Google Gemini Chat Model1",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "0r3AVA8yJs8OowjV",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "## Recebe chamada no chat\n",
+        "height": 520,
+        "width": 340
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -500,
+        -200
+      ],
+      "typeVersion": 1,
+      "id": "23ad36b0-9f1f-477f-be90-ce3c2fb661a8",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## Interpreta a Pergunta e a transforma em Query SQL utilizando AI\n",
+        "height": 520,
+        "width": 340
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -140,
+        -200
+      ],
+      "typeVersion": 1,
+      "id": "c57a4682-1db0-4187-af6a-d6681733c7e7",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "## Limpa os Markdowns do retorno da AI e executa a Query no banco de dados Postgres hospedado no Supabase\n",
+        "height": 520,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        240,
+        -200
+      ],
+      "typeVersion": 1,
+      "id": "41af7ed6-708e-4e78-83a1-49286e62855f",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Recebe o output do banco de dados, o interpreta e responde o usuário\n",
+        "height": 520,
+        "width": 400
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        660,
+        -200
+      ],
+      "typeVersion": 1,
+      "id": "8f6103a4-72b6-43da-890f-ee9e586b347c",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Olá, sou seu assistente fiscal e irei te ajudar. Insira sua dúvida abaixo:",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -360,
+        -20
+      ],
+      "id": "c00ebd49-2723-4bfd-ba85-b171842b0616",
+      "name": "When chat message received",
+      "webhookId": "b01059cb-405a-4f0d-91cb-10a604529549"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Limpar retorno LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Postgres": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limpar retorno LLM": {
+      "main": [
+        [
+          {
+            "node": "Postgres",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "d463615a-b376-464f-bfc8-c19e3970aa12",
+  "meta": {
+    "instanceId": "873f877f384b221e93bb2ba4078647cfb8d33b9a5654401b299751e7b124c720"
+  },
+  "id": "QFQf1ASnIgRE0dgw",
+  "tags": []
+}
